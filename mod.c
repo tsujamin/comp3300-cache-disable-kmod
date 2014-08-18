@@ -12,10 +12,7 @@
 
 #define PROC_NAME "kerninfo"
 
-
 struct proc_dir_entry *proc_file;
-
-
 
 /*
  * Show function for the seq_file
@@ -48,7 +45,6 @@ static const struct file_operations proc_fops = {
 	.release = single_release
 };
 
-
 /*
  * Initialises the kernel module. Called when loaded
  */
@@ -64,7 +60,6 @@ int __init mod_init(void)
 		proc_remove(proc_file);
 		return -ENOSPC;
 	}
-
 
 	return 0;
 }
