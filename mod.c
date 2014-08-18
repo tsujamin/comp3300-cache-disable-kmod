@@ -14,12 +14,35 @@
 
 struct proc_dir_entry *proc_file;
 
+
+/*
+* Checks CD bit of CR0 for current system emmory caching policy
+*/
+int sysmem_cache_enabled(void)
+{
+	long cr0;
+
+	asm("movq %%cr0, %0" : "=r" (cr0) : );
+
+	return !(cr0 & (1 << 30));
+}
+
+void enable_miss_counter(void) {
+	//IA32_PERFEVTSELx sets event, mask and level
+	//IA32_PMCx counts events
+	//18.2.1.1
+
+	//asm("and %%ia32_pmc0, 0" : : );
+}
+
 /*
  * Show function for the seq_file
  */
 int proc_single_show(struct seq_file *s, void *v)
 {
 	seq_printf(s, "Hello World!\n");
+	seq_printf(s, "System Memory Caching: %s\n",
+		sysmem_cache_enabled() ? "yes" : "no");
 	return 0;
 }
 

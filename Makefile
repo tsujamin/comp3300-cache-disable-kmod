@@ -1,1 +1,1 @@
-obj-m += mod.o
+obj-m := mod.o
