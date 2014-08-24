@@ -9,6 +9,7 @@
 #include <linux/proc_fs.h>
 #include <linux/fs.h>
 #include <linux/seq_file.h>
+#include <linux/smp.h>
 
 #define PROC_NAME "kerninfo"
 
@@ -23,37 +24,44 @@ int sysmem_cache_enabled(void)
 	long cr0;
 
 	asm("movq %%cr0, %0" : "=r" (cr0) : );
-
+	
 	return !(cr0 & (1 << 30));
 }
 
 /*
  * Disables system memory caching
- * Doesnt currently switch the MTRR
+ * Doesnt currently switch the MTRR (Intel spec says I should?)
  */
-void sysmem_cache_set(int enable) 
+void sysmem_cache_set(void *enable) 
 {
-	uint64_t flag = 1 << 30;
-	
-	printk(KERN_INFO "%s: %s system memory cache", PROC_NAME,
-		enable ? "enabling" : "disabling");
-
 	if(enable) {
 		asm(	"push %%rax \n\t"
 			"movq %%cr0, %%rax \n\t"
-			"or %%rax, %0 \n\t"
+			"and $~(1<<30), %%rax \n\t"
 			"movq %%rax, %%cr0 \n\t"
 			"pop %%rax"
-			: : "r" (flag) );
+			: : );
 	} else {	
 		asm(	"push %%rax \n\t"
 			"movq %%cr0, %%rax \n\t"
-			"and %%rax, %0 \n\t"
+			"or $(1<<30),  %%rax  \n\t"
 			"movq %%rax, %%cr0 \n\t"
-			"pop %%rax \n\t"
-			"wbinvd"
-			: : "r" (~flag) );
+			"wbinvd \n\t"
+			"pop %%rax"
+			: : );			
 	}
+}
+
+/*
+ * Calls sysmem_cache_set accross all cores
+ */
+void smp_sysmem_cache_set(int enable)
+{
+	printk(KERN_INFO "%s: %s system memory cache", PROC_NAME,
+		enable ? "enabling" : "disabling");
+
+	sysmem_cache_set((void *) enable);
+	smp_call_function(sysmem_cache_set, (void *) enable, true);
 }
 
 /*
@@ -61,7 +69,6 @@ void sysmem_cache_set(int enable)
  */
 int proc_single_show(struct seq_file *s, void *v)
 {
-	seq_printf(s, "Hello World!\n");
 	seq_printf(s, "System Memory Caching: %s\n",
 		sysmem_cache_enabled() ? "yes" : "no");
 	return 0;
@@ -80,8 +87,8 @@ static ssize_t proc_write(struct file *f, const char *data, size_t len, loff_t *
 		printk(KERN_WARNING "%s: invalid write value", PROC_NAME);
 		return -EINVAL;
 	}
-
-	sysmem_cache_set(data[0] - '0');
+	
+	smp_sysmem_cache_set(data[0]-'0');
 
 	mutex_unlock(&seq_f->lock);
 	return len;
@@ -134,7 +141,7 @@ int __init mod_init(void)
  */
 void __exit mod_exit(void)
 {
-	sysmem_cache_set(1);
+	smp_sysmem_cache_set(1);
 
 	printk(KERN_INFO "%s: removing procfile\n", PROC_NAME);
 	proc_remove(proc_file);
