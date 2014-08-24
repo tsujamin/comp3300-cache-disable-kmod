@@ -83,6 +83,7 @@ static ssize_t proc_write(struct file *f, const char *data, size_t len, loff_t *
 
 	sysmem_cache_set(data[0] - '0');
 
+	mutex_unlock(&seq_f->lock);
 	return len;
 }
 
