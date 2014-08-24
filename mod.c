@@ -16,8 +16,8 @@ struct proc_dir_entry *proc_file;
 
 
 /*
-* Checks CD bit of CR0 for current system emmory caching policy
-*/
+ * Checks CD bit of CR0 for current system emmory caching policy
+ */
 int sysmem_cache_enabled(void)
 {
 	long cr0;
@@ -27,12 +27,32 @@ int sysmem_cache_enabled(void)
 	return !(cr0 & (1 << 30));
 }
 
-void enable_miss_counter(void) {
-	//IA32_PERFEVTSELx sets event, mask and level
-	//IA32_PMCx counts events
-	//18.2.1.1
+/*
+ * Disables system memory caching
+ */
+void sysmem_cache_set(int enable) 
+{
+	uint64_t flag = 1 << 30;
+	
+	printk(KERN_INFO "%s: %s system memory cache", PROC_NAME,
+		enable ? "enabling" : "disabling");
 
-	//asm("and %%ia32_pmc0, 0" : : );
+	if(enable) {
+		asm(	"push %%rax \n\t"
+			"movq %%cr0, %%rax \n\t"
+			"or %%rax, %0 \n\t"
+			"movq %%rax, %%cr0 \n\t"
+			"pop %%rax"
+			: : "r" (flag) );
+	} else {	
+		asm(	"push %%rax \n\t"
+			"movq %%cr0, %%rax \n\t"
+			"and %%rax, %0 \n\t"
+			"movq %%rax, %%cr0 \n\t"
+			"pop %%rax \n\t"
+			"wbinvd"
+			: : "r" (~flag) );
+	}
 }
 
 /*
@@ -46,6 +66,20 @@ int proc_single_show(struct seq_file *s, void *v)
 	return 0;
 }
 
+int proc_write(struct file *f, const char *data, size_t len, loff_t *offset)
+{
+	struct seq_file *seq_f = f->private_data;
+	mutex_lock(&seq_f->lock);
+
+	if(len != 1 || (data[0] != '1' && data[0] != '0')) {
+		printk(KERN_WARNING "%s: invalid write value", PROC_NAME);
+		return -EINVAL;
+	}
+
+	sysmem_cache_set(data[0] - '0');
+
+	return 1;
+}
 
 /*
  * fops function which translates to a seq_file single open.
@@ -93,8 +127,10 @@ int __init mod_init(void)
  */
 void __exit mod_exit(void)
 {
+	sysmem_cache_set(1);
+
 	printk(KERN_INFO "%s: removing procfile\n", PROC_NAME);
-  proc_remove(proc_file);
+	proc_remove(proc_file);
 }
 
 
