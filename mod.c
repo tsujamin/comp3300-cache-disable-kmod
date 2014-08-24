@@ -29,6 +29,7 @@ int sysmem_cache_enabled(void)
 
 /*
  * Disables system memory caching
+ * Doesnt currently switch the MTRR
  */
 void sysmem_cache_set(int enable) 
 {
@@ -66,19 +67,23 @@ int proc_single_show(struct seq_file *s, void *v)
 	return 0;
 }
 
-int proc_write(struct file *f, const char *data, size_t len, loff_t *offset)
+/*
+ * Write function for the seq_file.
+ * Will set system caching based on the input (either 1 or 0)
+ */
+static ssize_t proc_write(struct file *f, const char *data, size_t len, loff_t *offset)
 {
 	struct seq_file *seq_f = f->private_data;
 	mutex_lock(&seq_f->lock);
 
-	if(len != 1 || (data[0] != '1' && data[0] != '0')) {
+	if(len != 2 || (data[0] != '1' && data[0] != '0')) {
 		printk(KERN_WARNING "%s: invalid write value", PROC_NAME);
 		return -EINVAL;
 	}
 
 	sysmem_cache_set(data[0] - '0');
 
-	return 1;
+	return len;
 }
 
 /*
@@ -99,7 +104,8 @@ static const struct file_operations proc_fops = {
 	.open = proc_single_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = single_release
+	.release = single_release,
+	.write = proc_write
 };
 
 /*
@@ -109,7 +115,7 @@ int __init mod_init(void)
 {
 	//Create new procfile
 	printk(KERN_INFO "%s: inserting procfile\n", PROC_NAME);
-	proc_file = proc_create(PROC_NAME, 0444, NULL, &proc_fops);
+	proc_file = proc_create(PROC_NAME, 0666, NULL, &proc_fops);
 
 	//cleanup if procfile creation failed
 	if(proc_file == NULL) {
