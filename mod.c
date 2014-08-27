@@ -128,7 +128,7 @@ int __init mod_init(void)
 	//cleanup if procfile creation failed
 	if(proc_file == NULL) {
 		printk(KERN_ERR "%s: could not create procfile\n", PROC_NAME);
-		proc_remove(proc_file);
+		remove_proc_entry(PROC_NAME, proc_file);
 		return -ENOSPC;
 	}
 
@@ -144,7 +144,7 @@ void __exit mod_exit(void)
 	smp_sysmem_cache_set(1);
 
 	printk(KERN_INFO "%s: removing procfile\n", PROC_NAME);
-	proc_remove(proc_file);
+	remove_proc_entry(PROC_NAME, proc_file);
 }
 
 
