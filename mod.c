@@ -65,12 +65,20 @@ void smp_sysmem_cache_set(int enable)
 }
 
 /*
+ * Print the current sysmem cache status
+ */
+void sysmem_cache_status_print(struct seq_file *s)
+{
+	seq_printf(s, "System Memory Caching: %s\n",
+		sysmem_cache_enabled() ? "yes" : "no");
+}
+
+/*
  * Show function for the seq_file
  */
 int proc_single_show(struct seq_file *s, void *v)
 {
-	seq_printf(s, "System Memory Caching: %s\n",
-		sysmem_cache_enabled() ? "yes" : "no");
+	sysmem_cache_status_print(s);	
 	return 0;
 }
 
