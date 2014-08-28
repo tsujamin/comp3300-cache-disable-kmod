@@ -10,6 +10,8 @@
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 #include <linux/smp.h>
+#include <linux/cpufreq.h>
+#include <linux/list.h>
 
 #define PROC_NAME "kerninfo"
 
@@ -74,11 +76,36 @@ void sysmem_cache_status_print(struct seq_file *s)
 }
 
 /*
+ *
+ */
+void cpufreq_print_governors(struct seq_file *s)
+{
+	struct cpufreq_policy freq_policy;
+	cpufreq_get_policy(&freq_policy, 0);
+	struct cpufreq_governor *head_governor = freq_policy.governor,
+				*current_governor;
+
+	seq_printf(s, "Current Governor: %s\n", head_governor->name);
+	seq_printf(s, "Available Governors: ");
+
+	list_for_each_entry(current_governor, &head_governor->governor_list, governor_list)
+	{
+		if(*(current_governor->name)) 
+			seq_printf(s, "%s ", current_governor->name);
+		else
+			seq_printf(s, "%s ", head_governor->name);
+	}
+	seq_printf(s, "\n");
+
+}
+
+/*
  * Show function for the seq_file
  */
 int proc_single_show(struct seq_file *s, void *v)
 {
 	sysmem_cache_status_print(s);	
+	cpufreq_print_governors(s);
 	return 0;
 }
 
@@ -161,3 +188,7 @@ void __exit mod_exit(void)
  */
 module_init(mod_init);
 module_exit(mod_exit);
+
+MODULE_AUTHOR("Benjamin Roberts <u5350335@anu.edu.au>");
+MODULE_DESCRIPTION("Cool cpu info");
+MODULE_LICENSE("GPL");
