@@ -15,6 +15,18 @@
 
 #define PROC_NAME "kerninfo"
 
+/*
+ * Define appropriate scratch registers and mov instructions
+ * for 32 and 64 bit systems
+ */
+#ifdef __x86_64__
+#define REG_A "rax"
+#define MOV "movq"
+#else
+#define REG_A "eax"
+#define MOV "mov"
+#endif
+
 struct proc_dir_entry *proc_file;
 struct mutex mod_lock;
 int cpu_count = 0;
@@ -26,7 +38,7 @@ int sysmem_cache_enabled(void)
 {
 	long cr0;
 
-	asm("movq %%cr0, %0" : "=r" (cr0) : );
+	asm(MOV" %%cr0, %0" : "=r" (cr0) : );
 	
 	return !(cr0 & (1 << 30));
 }
@@ -38,19 +50,19 @@ int sysmem_cache_enabled(void)
 void sysmem_cache_set(void *enable) 
 {
 	if(enable) {
-		asm(	"push %%rax \n\t"
-			"movq %%cr0, %%rax \n\t"
-			"and $~(1<<30), %%rax \n\t"
-			"movq %%rax, %%cr0 \n\t"
-			"pop %%rax"
+		asm(	"push %%"REG_A" \n\t"
+			MOV" %%cr0, %%"REG_A" \n\t"
+			"and $~(1<<30), %%"REG_A" \n\t"
+			MOV" %%"REG_A", %%cr0 \n\t"
+			"pop %%"REG_A
 			: : );
 	} else {	
-		asm(	"push %%rax \n\t"
-			"movq %%cr0, %%rax \n\t"
-			"or $(1<<30),  %%rax  \n\t"
-			"movq %%rax, %%cr0 \n\t"
+		asm(	"push %%"REG_A" \n\t"
+			MOV" %%cr0, %%"REG_A" \n\t"
+			"or $(1<<30),  %%"REG_A"  \n\t"
+			MOV" %%"REG_A", %%cr0 \n\t"
 			"wbinvd \n\t"
-			"pop %%rax"
+			"pop %%"REG_A
 			: : );			
 	}
 }
