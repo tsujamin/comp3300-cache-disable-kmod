@@ -2,6 +2,39 @@
  * Benjamin Roberts
  * u5350335@anu.edu.au
  * COMP3300 Assignment One
+ *
+ * My proc entry provides information on the CPU's cache state and the
+ * currently applied governor settings. The cache state relates to the 
+ * the on-die caches (ie L1 -> L3).  The module also provides functionality 
+ * to toggle use of the system cache on all cores by writing 1 or 0 to its
+ * proc file. This may be a desirable  feature in environments where 
+ * shared cache timing attacks could possiblyoccur. The list of 
+ * available governors is core specific but in practice is usually applied 
+ * homogenously.The proc file is created and managed by the seq_file
+ * interface.
+ *
+ * The governor information is mamanged by the cpufreq module and 
+ * associated drivers and is stored in policy structures; each with sub 
+ * structures. The governor structure is a sub structure of cpu_freq 
+ * policy and uses the kernel's linked list structure and associated
+ * functions. The cache status is stored in bit 30 of a cpu cores 
+ * CR0 register (as documented in the intel process specification).
+ *
+ * The module heavily uses the smp_call_function routine to perform
+ * actions on multiple availabe cpu cores. Toggling of cpu cache
+ * usage is performed on the current core before being called on all 
+ * other cores. The change requires flipping a bit of the cr0 register
+ * and, if disabling, invalidating of current cache lines. This is 
+ * performed in gcc inline assembly blocks combined with architcture
+ * specific scratch register/move command macros. Printing of the
+ * various cpu policy statistics was accomplished by using the 
+ * linux linked list iterator macros. The number of cpu cores was required
+ * in advace of this operation and was determinedby scheduling an increment
+ * operation surrounded by mutex locks on each core.
+ *
+ * The module works on the Linux 3.8 image used on the CSIT lab images.
+ * Due to personal injury sustained before testing on theng the 3.13 image 
+ * used for the VM I was unable to port the code.
  */
 
 #include <linux/module.h>
@@ -13,7 +46,7 @@
 #include <linux/cpufreq.h>
 #include <linux/list.h>
 
-#define PROC_NAME "kerninfo"
+#define PROC_NAME "cpustate"
 
 /*
  * Define appropriate scratch registers and mov instructions
@@ -27,6 +60,9 @@
 #define MOV "mov"
 #endif
 
+/*
+ * Module globals
+ */
 struct proc_dir_entry *proc_file;
 struct mutex mod_lock;
 int cpu_count = 0;
@@ -44,8 +80,8 @@ int sysmem_cache_enabled(void)
 }
 
 /*
- * Disables system memory caching
- * Doesnt currently switch the MTRR (Intel spec says I should?)
+ * Disables system memory caching by setting cr0:30
+ * Doesnt currently switch the MTRR
  */
 void sysmem_cache_set(void *enable) 
 {
@@ -100,6 +136,7 @@ void cpufreq_print_available_governors(struct seq_file *s)
 
 	seq_printf(s, "Available Governors: ");
 
+	//iterate through the governor list printing their names
 	list_for_each_entry(current_governor, &head_governor->governor_list, governor_list)
 	{
 		if(*(current_governor->name)) 
@@ -119,6 +156,8 @@ void cpufreq_print_current_governors(struct seq_file *s)
 	struct cpufreq_policy freq_policy;
 	int i;	
 	seq_printf(s, "CPU\tGovernor\tMin (MHz)\tMax (MHz)\n");
+
+	//loop through available cpu's and print their policy
 	for(i = 0; i < cpu_count; i++)
 	{
 		cpufreq_get_policy(&freq_policy, i);
@@ -148,7 +187,8 @@ void cpufreq_count(void * v)
 	mutex_unlock(&mod_lock);
 }
 /*
- * Show function for the seq_file
+ * Show function for the seq_file.
+ * Prints each of the modules info functions.
  */
 int proc_single_show(struct seq_file *s, void *v)
 {
@@ -169,6 +209,7 @@ static ssize_t proc_write(struct file *f, const char *data, size_t len, loff_t *
 	struct seq_file *seq_f = f->private_data;
 	mutex_lock(&seq_f->lock);
 
+	//Check that data written is 1 or 0
 	if(len != 2 || (data[0] != '1' && data[0] != '0')) {
 		printk(KERN_WARNING "%s: invalid write value", PROC_NAME);
 		return -EINVAL;
@@ -219,7 +260,6 @@ int __init mod_init(void)
 
 	//init the big module lock and count the cpu cores
 	mutex_init(&mod_lock);
-
 	cpufreq_count(NULL);
 	smp_call_function(cpufreq_count, NULL, true);	
 
@@ -229,6 +269,7 @@ int __init mod_init(void)
 
 /*
  * Cleans up the module, Called when removed.
+ * Re-enables the system cache.
  */
 void __exit mod_exit(void)
 {
@@ -246,5 +287,5 @@ module_init(mod_init);
 module_exit(mod_exit);
 
 MODULE_AUTHOR("Benjamin Roberts <u5350335@anu.edu.au>");
-MODULE_DESCRIPTION("Cool cpu info");
+MODULE_DESCRIPTION("CPU state and policy information");
 MODULE_LICENSE("GPL");
