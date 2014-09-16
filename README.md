@@ -12,6 +12,6 @@ written for COMP3300 at the Australian National University
 
 Installing
 ----------
-just call `build.sh` and the module will be compiled and loaded. tested on linux 3.13.
+just call `build.sh` and the module will be compiled and loaded. tested on linux 3.8.
 
 you may need to edit build.sh depending on where your linux kerel src/headers are located
